@@ -70,7 +70,7 @@ manifest_url="https://registry-1.docker.io/v2/${image}/manifests/$tag"
 blobs_base_url="https://registry-1.docker.io/v2/${image}/blobs"
 
 echo "Getting API token..."
-token=$(curl -sS -H 'GET' "${api_token_url}" | extract 'token')
+token=$(curl -sS "${api_token_url}" | extract 'token')
 auth_header="Authorization: Bearer $token"
 
 echo "Getting image manifest for $image:$tag..."

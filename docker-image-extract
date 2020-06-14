@@ -86,6 +86,11 @@ layers=$(curl -sS -H "${auth_header}" "${manifest_url}" |
              # layer shadows/overwrites the same file from an older layer.
              tac)
 
+if [ -z "${layers}" ]; then
+    echo "No layers returned. Verify that the image and tag are valid."
+    exit 1
+fi
+
 output_dir="./output"
 mkdir -p "${output_dir}"
 

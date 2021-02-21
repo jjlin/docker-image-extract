@@ -12,9 +12,7 @@ environment, with the possible exception of `curl`:
 * `rm`
 * `sed`
 * `sh`
-* `tac`
 * `tar`
-* `uniq`
 
 ## See also
 

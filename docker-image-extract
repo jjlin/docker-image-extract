@@ -2,7 +2,7 @@
 #
 # This script pulls and extracts all files from an image in Docker Hub.
 #
-# Copyright (c) 2020, Jeremy Lin
+# Copyright (c) 2020-2021, Jeremy Lin
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -23,7 +23,7 @@
 # DEALINGS IN THE SOFTWARE.
 #
 if [ $# -ne 1 ]; then
-    echo "$0 IMAGE[:TAG]"
+    echo "$0 IMAGE[:REF]"
     echo
     echo "This script pulls and extracts all files from an image in Docker Hub."
     echo
@@ -34,11 +34,15 @@ if [ $# -ne 1 ]; then
     echo
     echo "# Same as above; tag defaults to 'latest'."
     echo "\$ $0 hello-world"
+    echo
+    echo "# Same as above, but specify the image by digest."
+    echo "# This also allows for pulling an image for a non-amd64 platform."
+    echo "\$ $0 hello-world:sha256:90659bf80b44ce6be8234e6ff90a1ac34acbeb826903b02cfa0da11c82cbc042"
     exit 1
 fi
 
 image_spec="$1"
-image="${image_spec%:*}"
+image="${image_spec%%:*}"
 if [ "${image#*/}" = "${image}" ]; then
     # Docker official images are in the 'library' namespace.
     image="library/${image}"
@@ -72,19 +76,13 @@ blobs_base_url="https://registry-1.docker.io/v2/${image}/blobs"
 echo "Getting API token..."
 token=$(curl -sS "${api_token_url}" | extract 'token')
 auth_header="Authorization: Bearer $token"
+v2_header="Accept: application/vnd.docker.distribution.manifest.v2+json"
 
 echo "Getting image manifest for $image:$tag..."
-layers=$(curl -sS -H "${auth_header}" "${manifest_url}" |
-             extract 'blobSum' |
-             # Ref: https://github.com/docker/distribution/issues/1527
-             # There can be duplicate layers. Reduce duplicate downloads a bit
-             # by removing adjacent duplicates.
-             uniq |
-             # Layers are listed in newest-to-oldest order (i.e., the reverse
-             # of the order in which they were generated in the Dockerfile).
-             # Reverse the layer order to ensure that a file from a newer
-             # layer shadows/overwrites the same file from an older layer.
-             tac)
+layers=$(curl -sS -H "${auth_header}" -H "${v2_header}" "${manifest_url}" |
+             # Extract `digest` values only after the `layers` section appears.
+             sed -n '/"layers":/,$ p' |
+             extract 'digest')
 
 if [ -z "${layers}" ]; then
     echo "No layers returned. Verify that the image and tag are valid."

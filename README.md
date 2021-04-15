@@ -6,7 +6,7 @@ environment, with the possible exception of `curl`:
 
 * `curl`
 * `grep`
-* `gunzip`
+* `gzip`
 * `find`
 * `mkdir`
 * `rm`
@@ -33,21 +33,12 @@ environment, with the possible exception of `curl`:
 $ ./docker-image-extract busybox:musl
 Getting API token...
 Getting image manifest for library/busybox:musl...
-Downloading layer b1911a4512165fe8d97b0871bd237ff314b1c7d39366bc295c3e0ba93bde7a61...
-Extracting layer...
-Downloading layer a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4...
+Downloading layer e4df39e4f349fc83694349a5a94afc8d9857fa66f7421427f3d2463a58d876d3...
 Extracting layer...
 Image contents extracted into ./output.
 $ ls output
-bin/
-dev/
-etc/
-home/
-root/
-tmp/
-usr/
-var/
+bin  dev  etc  home  root  tmp  usr  var
 $ ls -l output/bin/{busybox,ls}
--rwx------ 392 jjlin users 1165544 Apr 13 16:43 output/bin/busybox
--rwx------ 392 jjlin users 1165544 Apr 13 16:43 output/bin/ls
+-rwx------ 393 jjlin users 1148648 Apr  7 13:18 output/bin/busybox
+-rwx------ 393 jjlin users 1148648 Apr  7 13:18 output/bin/ls
 ```

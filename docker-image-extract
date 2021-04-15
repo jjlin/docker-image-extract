@@ -97,10 +97,9 @@ for layer in $layers; do
     hash="${layer#sha256:}"
     tar_file=layers/"${hash}"
     echo "Downloading layer ${hash}..."
-    curl -sSL -H "${auth_header}" "${blobs_base_url}/${layer}" |
-        gunzip -c > "${tar_file}"
+    curl -sSL -H "${auth_header}" "${blobs_base_url}/${layer}" > "${tar_file}"
     echo "Extracting layer..."
-    tar -xf "${tar_file}" -C "${output_dir}"
+    gzip -dc "${tar_file}" | tar -C "${output_dir}" -xf -
     # Ref: https://github.com/moby/moby/blob/master/image/spec/v1.2.md#creating-an-image-filesystem-changeset
     #      https://github.com/moby/moby/blob/master/pkg/archive/whiteouts.go
     # Search for "whiteout" files to indicate files deleted in this layer.

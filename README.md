@@ -2,9 +2,9 @@ The `docker-image-extract` script pulls and extracts all files from an image
 in Docker Hub.
 
 It has minimal dependencies that should exist in pretty much any Linux
-environment, with the possible exception of `curl`:
+environment, with the possible exception of `curl`/`wget`:
 
-* `curl`
+* `curl` or `wget`
 * `grep`
 * `gzip`
 * `find`

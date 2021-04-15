@@ -41,6 +41,19 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
+have_curl() {
+    command -v curl >/dev/null
+}
+
+have_wget() {
+    command -v wget >/dev/null
+}
+
+if ! have_curl && ! have_wget; then
+    echo "This script requires either curl or wget."
+    exit 1
+fi
+
 image_spec="$1"
 image="${image_spec%%:*}"
 if [ "${image#*/}" = "${image}" ]; then
@@ -74,15 +87,26 @@ manifest_url="https://registry-1.docker.io/v2/${image}/manifests/$tag"
 blobs_base_url="https://registry-1.docker.io/v2/${image}/blobs"
 
 echo "Getting API token..."
-token=$(curl -sS "${api_token_url}" | extract 'token')
+if have_curl; then
+    token=$(curl -sS "${api_token_url}" | extract 'token')
+else
+    token=$(wget -qO- "${api_token_url}" | extract 'token')
+fi
 auth_header="Authorization: Bearer $token"
 v2_header="Accept: application/vnd.docker.distribution.manifest.v2+json"
 
 echo "Getting image manifest for $image:$tag..."
-layers=$(curl -sS -H "${auth_header}" -H "${v2_header}" "${manifest_url}" |
-             # Extract `digest` values only after the `layers` section appears.
-             sed -n '/"layers":/,$ p' |
-             extract 'digest')
+if have_curl; then
+    layers=$(curl -sS -H "${auth_header}" -H "${v2_header}" "${manifest_url}" |
+                 # Extract `digest` values only after the `layers` section appears.
+                 sed -n '/"layers":/,$ p' |
+                 extract 'digest')
+else
+    layers=$(wget -qO- --header "${auth_header}" --header "${v2_header}" "${manifest_url}" |
+                 # Extract `digest` values only after the `layers` section appears.
+                 sed -n '/"layers":/,$ p' |
+                 extract 'digest')
+fi
 
 if [ -z "${layers}" ]; then
     echo "No layers returned. Verify that the image and tag are valid."
@@ -97,7 +121,11 @@ for layer in $layers; do
     hash="${layer#sha256:}"
     tar_file=layers/"${hash}"
     echo "Downloading layer ${hash}..."
-    curl -sSL -H "${auth_header}" "${blobs_base_url}/${layer}" > "${tar_file}"
+    if have_curl; then
+        curl -sSL -H "${auth_header}" "${blobs_base_url}/${layer}" > "${tar_file}"
+    else
+        wget -qO- --header "${auth_header}" "${blobs_base_url}/${layer}" > "${tar_file}"
+    fi
     echo "Extracting layer..."
     gzip -dc "${tar_file}" | tar -C "${output_dir}" -xf -
     # Ref: https://github.com/moby/moby/blob/master/image/spec/v1.2.md#creating-an-image-filesystem-changeset

@@ -77,6 +77,28 @@ extract() {
     sed -e 's/"$//' -e 's/.*"//'
 }
 
+# Fetch a URL to stdout. Up to two header arguments may be specified:
+#
+#   fetch <url> [name1: value1] [name2: value2]
+#
+fetch() {
+    if have_curl; then
+        if [ $# -eq 2 ]; then
+            set -- -H "$2" "$1"
+        elif [ $# -eq 3 ]; then
+            set -- -H "$2" -H "$3" "$1"
+        fi
+        curl -sSL "$@"
+    else
+        if [ $# -eq 2 ]; then
+            set -- --header "$2" "$1"
+        elif [ $# -eq 3 ]; then
+            set -- --header "$2" --header "$3" "$1"
+        fi
+        wget -qO- "$@"
+    fi
+}
+
 # https://docs.docker.com/registry/spec/auth/token/#how-to-authenticate
 api_token_url="https://auth.docker.io/token?service=registry.docker.io&scope=repository:$image:pull"
 
@@ -87,26 +109,15 @@ manifest_url="https://registry-1.docker.io/v2/${image}/manifests/$tag"
 blobs_base_url="https://registry-1.docker.io/v2/${image}/blobs"
 
 echo "Getting API token..."
-if have_curl; then
-    token=$(curl -sS "${api_token_url}" | extract 'token')
-else
-    token=$(wget -qO- "${api_token_url}" | extract 'token')
-fi
+token=$(fetch "${api_token_url}" | extract 'token')
 auth_header="Authorization: Bearer $token"
 v2_header="Accept: application/vnd.docker.distribution.manifest.v2+json"
 
 echo "Getting image manifest for $image:$tag..."
-if have_curl; then
-    layers=$(curl -sS -H "${auth_header}" -H "${v2_header}" "${manifest_url}" |
-                 # Extract `digest` values only after the `layers` section appears.
-                 sed -n '/"layers":/,$ p' |
-                 extract 'digest')
-else
-    layers=$(wget -qO- --header "${auth_header}" --header "${v2_header}" "${manifest_url}" |
-                 # Extract `digest` values only after the `layers` section appears.
-                 sed -n '/"layers":/,$ p' |
-                 extract 'digest')
-fi
+layers=$(fetch "${manifest_url}" "${auth_header}" "${v2_header}" |
+             # Extract `digest` values only after the `layers` section appears.
+             sed -n '/"layers":/,$ p' |
+             extract 'digest')
 
 if [ -z "${layers}" ]; then
     echo "No layers returned. Verify that the image and tag are valid."
@@ -116,18 +127,10 @@ fi
 output_dir="./output"
 mkdir -p "${output_dir}"
 
-mkdir -p layers
 for layer in $layers; do
     hash="${layer#sha256:}"
-    tar_file=layers/"${hash}"
-    echo "Downloading layer ${hash}..."
-    if have_curl; then
-        curl -sSL -H "${auth_header}" "${blobs_base_url}/${layer}" > "${tar_file}"
-    else
-        wget -qO- --header "${auth_header}" "${blobs_base_url}/${layer}" > "${tar_file}"
-    fi
-    echo "Extracting layer..."
-    gzip -dc "${tar_file}" | tar -C "${output_dir}" -xf -
+    echo "Fetching and extracting layer ${hash}..."
+    fetch "${blobs_base_url}/${layer}" "${auth_header}" | gzip -d | tar -C "${output_dir}" -xf -
     # Ref: https://github.com/moby/moby/blob/master/image/spec/v1.2.md#creating-an-image-filesystem-changeset
     #      https://github.com/moby/moby/blob/master/pkg/archive/whiteouts.go
     # Search for "whiteout" files to indicate files deleted in this layer.
@@ -141,6 +144,5 @@ for layer in $layers; do
     done
     IFS="${OLD_IFS}"
 done
-rm -rf layers
 
 echo "Image contents extracted into $output_dir."

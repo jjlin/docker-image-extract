@@ -23,9 +23,8 @@ environment, with the possible exception of `curl`/`wget`:
 
 * https://github.com/moby/moby/blob/master/contrib/download-frozen-image-v2.sh
 
-  This script ostensibly does something similar. It's a lot more elaborate
-  and maybe handles more edge cases, but I haven't looked into the exact
-  differences. It also has a dependency on `jq`, which I wanted to avoid.
+  This script downloads the layers of a Docker image in a form suitable for
+  use with `docker load`. It doesn't actually extract the layers, though.
 
 ## Sample output
 
@@ -33,8 +32,7 @@ environment, with the possible exception of `curl`/`wget`:
 $ ./docker-image-extract busybox:musl
 Getting API token...
 Getting image manifest for library/busybox:musl...
-Downloading layer e4df39e4f349fc83694349a5a94afc8d9857fa66f7421427f3d2463a58d876d3...
-Extracting layer...
+Fetching and extracting layer e4df39e4f349fc83694349a5a94afc8d9857fa66f7421427f3d2463a58d876d3...
 Image contents extracted into ./output.
 $ ls output
 bin  dev  etc  home  root  tmp  usr  var

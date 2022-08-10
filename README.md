@@ -1,5 +1,5 @@
 The `docker-image-extract` script pulls and extracts all files from an image
-in Docker Hub.
+in [Docker Hub](https://hub.docker.com/).
 
 It has minimal dependencies that should exist in pretty much any Linux
 environment, with the possible exception of `curl`/`wget`:
@@ -13,6 +13,10 @@ environment, with the possible exception of `curl`/`wget`:
 * `sed`
 * `sh`
 * `tar`
+
+If you are using [BusyBox](https://busybox.net/), version 1.34.0 or later is
+required, as the `wget` implementation in earlier versions does not recognize
+the HTTP 307/308 redirects returned by Docker Hub.
 
 ## See also
 

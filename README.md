@@ -27,8 +27,9 @@ the HTTP 307/308 redirects returned by Docker Hub.
 
 * https://github.com/moby/moby/blob/master/contrib/download-frozen-image-v2.sh
 
-  This script downloads the layers of a Docker image in a form suitable for
-  use with `docker load`. It doesn't actually extract the layers, though.
+  This script downloads the layers of a Docker image in a form suitable for use
+  with [`docker load`](https://docs.docker.com/engine/reference/commandline/load/).
+  It doesn't actually extract the layers, though.
 
 ## Sample output
 

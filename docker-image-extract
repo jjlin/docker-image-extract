@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # This script pulls and extracts all files from an image in Docker Hub.
 #
@@ -22,7 +22,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 #
-if [ $# -ne 1 ]; then
+if [ $# -eq 0 ]; then
     echo "$0 IMAGE[:REF]"
     echo
     echo "This script pulls and extracts all files from an image in Docker Hub."
@@ -35,8 +35,10 @@ if [ $# -ne 1 ]; then
     echo "# Same as above; tag defaults to 'latest'."
     echo "\$ $0 hello-world"
     echo
+    echo "# Same as above; tag defaults to 'latest' for a specific OS/ARCH."
+    echo "\$ $0 hello-world linux/arm/v6"
+    echo
     echo "# Same as above, but specify the image by digest."
-    echo "# This also allows for pulling an image for a non-amd64 platform."
     echo "\$ $0 hello-world:sha256:90659bf80b44ce6be8234e6ff90a1ac34acbeb826903b02cfa0da11c82cbc042"
     exit 1
 fi
@@ -49,20 +51,18 @@ have_wget() {
     command -v wget >/dev/null
 }
 
+have_jq() {
+    command -v jq >/dev/null
+}
+
 if ! have_curl && ! have_wget; then
     echo "This script requires either curl or wget."
     exit 1
 fi
 
-image_spec="$1"
-image="${image_spec%%:*}"
-if [ "${image#*/}" = "${image}" ]; then
-    # Docker official images are in the 'library' namespace.
-    image="library/${image}"
-fi
-tag="${image_spec#*:}"
-if [ "${tag}" = "${image_spec}" ]; then
-    tag=latest
+if ! have_jq; then
+    echo "This script requires jq."
+    exit 1
 fi
 
 # Given a JSON input on stdin, extract the string value associated with the
@@ -99,11 +99,42 @@ fetch() {
     fi
 }
 
+image_spec="$1"
+os_arch_variant="$2"
+
+IFS='/' read -ra newarr <<< "$os_arch_variant"
+os=${newarr[0]:-'linux'}
+arch=${newarr[1]:-'amd64'}
+variant=${newarr[2]:-}
+
+image="${image_spec%%:*}"
+if [ "${image#*/}" = "${image}" ]; then
+    # Docker official images are in the 'library' namespace.
+    image="library/${image}"
+fi
+
+tag="${image_spec#*:}"
+if [ "${tag}" = "${image_spec}" ]; then
+    tag=latest
+fi
+
+digest="${image_spec#*:}"
+if [[ "${digest}" != sha* ]]; then
+    if [ -z "$variant" ]
+    then
+        digest=$(fetch https://hub.docker.com/v2/repositories/$image/tags/$tag/ | jq -r '.images[] | select(.os=="'$os'" and .architecture=="'$arch'").digest')
+    else
+        digest=$(fetch https://hub.docker.com/v2/repositories/$image/tags/$tag/ | jq -r '.images[] | select(.os=="'$os'" and .architecture=="'$arch'" and .variant=="'$variant'").digest')
+    fi
+else
+    tag=unknow
+fi
+
 # https://docs.docker.com/registry/spec/auth/token/#how-to-authenticate
 api_token_url="https://auth.docker.io/token?service=registry.docker.io&scope=repository:$image:pull"
 
 # https://github.com/docker/distribution/blob/master/docs/spec/api.md#pulling-an-image-manifest
-manifest_url="https://registry-1.docker.io/v2/${image}/manifests/$tag"
+manifest_url="https://registry-1.docker.io/v2/${image}/manifests/$digest"
 
 # https://github.com/docker/distribution/blob/master/docs/spec/api.md#pulling-a-layer
 blobs_base_url="https://registry-1.docker.io/v2/${image}/blobs"
@@ -113,7 +144,7 @@ token=$(fetch "${api_token_url}" | extract 'token')
 auth_header="Authorization: Bearer $token"
 v2_header="Accept: application/vnd.docker.distribution.manifest.v2+json"
 
-echo "Getting image manifest for $image:$tag..."
+echo "Getting image manifest for $image:$tag $digest..."
 layers=$(fetch "${manifest_url}" "${auth_header}" "${v2_header}" |
              # Extract `digest` values only after the `layers` section appears.
              sed -n '/"layers":/,$ p' |

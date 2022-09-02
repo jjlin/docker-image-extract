@@ -5,9 +5,10 @@ It has minimal dependencies that should exist in pretty much any Linux
 environment, with the possible exception of `curl`/`wget`:
 
 * `curl` or `wget`
+* `find`
 * `grep`
 * `gzip`
-* `find`
+* `jq`
 * `mkdir`
 * `rm`
 * `sed`

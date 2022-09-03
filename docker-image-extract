@@ -184,10 +184,15 @@ else
         grep architecture |
         # Search for an image that matches the platform.
         while read -r image; do
-            os="$(echo ${image} | extract 'os')"
+            # Arch is probably most likely to be unique, so check that first.
             arch="$(echo ${image} | extract 'architecture')"
+            if [ "${arch}" != "${ARCH}" ]; then continue; fi
+
+            os="$(echo ${image} | extract 'os')"
+            if [ "${os}" != "${OS}" ]; then continue; fi
+
             variant="$(echo ${image} | extract 'variant')"
-            if [ "${os}" = "${OS}" ] && [ "${arch}" = "${ARCH}" ] && [ "${variant}" = "${VARIANT}" ]; then
+            if [ "${variant}" = "${VARIANT}" ]; then
                 echo ${image} | extract 'digest'
                 break
             fi

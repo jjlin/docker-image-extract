@@ -2,7 +2,7 @@
 #
 # This script pulls and extracts all files from an image in Docker Hub.
 #
-# Copyright (c) 2020-2021, Jeremy Lin
+# Copyright (c) 2020-2022, Jeremy Lin
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -21,25 +21,79 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-#
-if [ $# -ne 1 ]; then
-    echo "$0 IMAGE[:REF]"
-    echo
+
+PLATFORM_DEFAULT="linux/amd64"
+PLATFORM="${PLATFORM_DEFAULT}"
+OUT_DIR="./output"
+
+usage() {
     echo "This script pulls and extracts all files from an image in Docker Hub."
+    echo
+    echo "$0 [OPTIONS...] IMAGE[:REF]"
+    echo
+    echo "IMAGE can be a community user image (like 'some-user/some-image') or a"
+    echo "Docker official image (like 'hello-world', which contains no '/')."
+    echo
+    echo "REF is either a tag name or a full SHA-256 image digest (with a 'sha256:' prefix)."
+    echo
+    echo "Options:"
+    echo
+    echo "  -p PLATFORM  Pull image for the specified platform (default: ${PLATFORM})"
+    echo "               For a given image on Docker Hub, the 'Tags' tab lists the"
+    echo "               platforms supported for that image."
+    echo "  -o OUT_DIR   Extract image to the specified output dir (default: ${OUT_DIR})"
+    echo "  -h           Show help with usage examples"
+}
+
+usage_detailed() {
+    usage
     echo
     echo "Examples:"
     echo
     echo "# Pull and extract all files in the 'hello-world' image tagged 'latest'."
     echo "\$ $0 hello-world:latest"
     echo
-    echo "# Same as above; tag defaults to 'latest'."
+    echo "# Same as above; ref defaults to the 'latest' tag."
     echo "\$ $0 hello-world"
     echo
-    echo "# Same as above, but specify the image by digest."
-    echo "# This also allows for pulling an image for a non-amd64 platform."
+    echo "# Pull the 'hello-world' image for the 'linux/arm64/v8' platform."
+    echo "\$ $0 -p linux/arm64/v8 hello-world"
+    echo
+    echo "# Pull an image by digest."
     echo "\$ $0 hello-world:sha256:90659bf80b44ce6be8234e6ff90a1ac34acbeb826903b02cfa0da11c82cbc042"
-    exit 1
+}
+
+if [ $# -eq 0 ]; then
+    usage_detailed
+    exit 0
 fi
+
+while getopts ':ho:p:' opt; do
+    case $opt in
+        o)
+            OUT_DIR="${OPTARG}"
+            ;;
+        p)
+            PLATFORM="${OPTARG}"
+            ;;
+        h)
+            usage_detailed
+            exit 0
+            ;;
+        \?)
+            echo "ERROR: Invalid option '-$OPTARG'"
+            echo
+            usage
+            exit 1
+            ;;
+        \:) echo "ERROR: Argument required for option '-$OPTARG'"
+            echo
+            usage
+            exit 1
+            ;;
+    esac
+done
+shift $(($OPTIND - 1))
 
 have_curl() {
     command -v curl >/dev/null
@@ -60,10 +114,19 @@ if [ "${image#*/}" = "${image}" ]; then
     # Docker official images are in the 'library' namespace.
     image="library/${image}"
 fi
-tag="${image_spec#*:}"
-if [ "${tag}" = "${image_spec}" ]; then
-    tag=latest
+ref="${image_spec#*:}"
+if [ "${ref}" = "${image_spec}" ]; then
+    echo "Defaulting ref to tag 'latest'..."
+    ref=latest
 fi
+
+# Split platform (OS/arch/variant) into separate variables.
+# A platform specifier doesn't always include the `variant` component.
+OLD_IFS="${IFS}"
+IFS=/ read -r OS ARCH VARIANT <<EOF
+${PLATFORM}
+EOF
+IFS="${OLD_IFS}"
 
 # Given a JSON input on stdin, extract the string value associated with the
 # specified key. This avoids an extra dependency on a tool like `jq`.
@@ -99,11 +162,50 @@ fetch() {
     fi
 }
 
+# https://docs.docker.com/docker-hub/api/latest/#tag/repositories
+manifest_list_url="https://hub.docker.com/v2/repositories/${image}/tags/${ref}"
+
+# If we're pulling the image for the default platform, or the ref is already
+# a SHA-256 image digest, then we don't need to look up anything.
+if [ "${PLATFORM}" = "${PLATFORM_DEFAULT}" ] || [ -z "${ref##sha256:*}" ]; then
+    digest="${ref}"
+else
+    echo "Getting multi-arch manifest list..."
+    digest=$(fetch "${manifest_list_url}" |
+        # Break up the single-line JSON output into separate lines by adding
+        # newlines before and after the chars '[', ']', '{', and '}'.
+        sed -e 's/\([][{}]\)/\n\1\n/g' |
+        # Extract the "images":[...] list.
+        sed -n '/"images":/,/]/ p' |
+        # Each image's details are now on a separate line, e.g.
+        # "architecture":"arm64","features":"","variant":"v8","digest":"sha256:054c85801c4cb41511b176eb0bf13a2c4bbd41611ddd70594ec3315e88813524","os":"linux","os_features":"","os_version":null,"size":828724,"status":"active","last_pulled":"2022-09-02T22:46:48.240632Z","last_pushed":"2022-09-02T00:42:45.69226Z"
+        # The image details are interspersed with lines of stray punctuation,
+        # so grep for an arbitrary string that must be in these lines.
+        grep architecture |
+        # Search for an image that matches the platform.
+        while read -r image; do
+            os="$(echo ${image} | extract 'os')"
+            arch="$(echo ${image} | extract 'architecture')"
+            variant="$(echo ${image} | extract 'variant')"
+            if [ "${os}" = "${OS}" ] && [ "${arch}" = "${ARCH}" ] && [ "${variant}" = "${VARIANT}" ]; then
+                echo ${image} | extract 'digest'
+                break
+            fi
+        done)
+fi
+
+if [ -n "${digest}" ]; then
+    echo "Platform ${PLATFORM} resolved to '${digest}'..."
+else
+    echo "No image digest found. Verify that the image, ref, and platform are valid."
+    exit 1
+fi
+
 # https://docs.docker.com/registry/spec/auth/token/#how-to-authenticate
 api_token_url="https://auth.docker.io/token?service=registry.docker.io&scope=repository:$image:pull"
 
 # https://github.com/docker/distribution/blob/master/docs/spec/api.md#pulling-an-image-manifest
-manifest_url="https://registry-1.docker.io/v2/${image}/manifests/$tag"
+manifest_url="https://registry-1.docker.io/v2/${image}/manifests/${digest}"
 
 # https://github.com/docker/distribution/blob/master/docs/spec/api.md#pulling-a-layer
 blobs_base_url="https://registry-1.docker.io/v2/${image}/blobs"
@@ -113,29 +215,28 @@ token=$(fetch "${api_token_url}" | extract 'token')
 auth_header="Authorization: Bearer $token"
 v2_header="Accept: application/vnd.docker.distribution.manifest.v2+json"
 
-echo "Getting image manifest for $image:$tag..."
+echo "Getting image manifest for $image:$ref..."
 layers=$(fetch "${manifest_url}" "${auth_header}" "${v2_header}" |
              # Extract `digest` values only after the `layers` section appears.
              sed -n '/"layers":/,$ p' |
              extract 'digest')
 
 if [ -z "${layers}" ]; then
-    echo "No layers returned. Verify that the image and tag are valid."
+    echo "No layers returned. Verify that the image and ref are valid."
     exit 1
 fi
 
-output_dir="./output"
-mkdir -p "${output_dir}"
+mkdir -p "${OUT_DIR}"
 
 for layer in $layers; do
     hash="${layer#sha256:}"
     echo "Fetching and extracting layer ${hash}..."
-    fetch "${blobs_base_url}/${layer}" "${auth_header}" | gzip -d | tar -C "${output_dir}" -xf -
+    fetch "${blobs_base_url}/${layer}" "${auth_header}" | gzip -d | tar -C "${OUT_DIR}" -xf -
     # Ref: https://github.com/moby/moby/blob/master/image/spec/v1.2.md#creating-an-image-filesystem-changeset
     #      https://github.com/moby/moby/blob/master/pkg/archive/whiteouts.go
     # Search for "whiteout" files to indicate files deleted in this layer.
     OLD_IFS="${IFS}"
-    find "${output_dir}" -name '.wh.*' | while IFS= read -r f; do
+    find "${OUT_DIR}" -name '.wh.*' | while IFS= read -r f; do
         dir="${f%/*}"
         wh_file="${f##*/}"
         file="${wh_file#.wh.}"
@@ -145,4 +246,4 @@ for layer in $layers; do
     IFS="${OLD_IFS}"
 done
 
-echo "Image contents extracted into $output_dir."
+echo "Image contents extracted into ${OUT_DIR}."

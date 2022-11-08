@@ -82,12 +82,12 @@ while getopts ':ho:p:' opt; do
             exit 0
             ;;
         \?)
-            echo "ERROR: Invalid option '-$OPTARG'"
+            echo "ERROR: Invalid option '-$OPTARG'."
             echo
             usage
             exit 1
             ;;
-        \:) echo "ERROR: Argument required for option '-$OPTARG'"
+        \:) echo "ERROR: Argument required for option '-$OPTARG'."
             echo
             usage
             exit 1
@@ -95,6 +95,13 @@ while getopts ':ho:p:' opt; do
     esac
 done
 shift $(($OPTIND - 1))
+
+if [ $# -eq 0 ]; then
+    echo "ERROR: Image to pull must be specified."
+    echo
+    usage
+    exit 1
+fi
 
 have_curl() {
     command -v curl >/dev/null

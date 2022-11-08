@@ -35,6 +35,7 @@ usage() {
     echo "Docker official image (like 'hello-world', which contains no '/')."
     echo
     echo "REF is either a tag name or a full SHA-256 image digest (with a 'sha256:' prefix)."
+    echo "The default ref is the 'latest' tag."
     echo
     echo "Options:"
     echo

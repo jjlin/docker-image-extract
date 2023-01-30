@@ -103,6 +103,17 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
+if [ -e "${OUT_DIR}" ]; then
+    if [ -d "${OUT_DIR}" ]; then
+        echo "WARNING: Output dir already exists. If it contains a previous extracted image,"
+        echo "there may be errors when trying to overwrite files with read-only permissions."
+        echo
+    else
+        echo "ERROR: Output dir already exists, but is not a directory."
+        exit 1
+    fi
+fi
+
 have_curl() {
     command -v curl >/dev/null
 }

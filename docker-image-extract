@@ -189,10 +189,15 @@ if [ -z "${ref##sha256:*}" ]; then
     digest="${ref}"
 else
     echo "Getting multi-arch manifest list..."
+    NL='
+'
     digest=$(fetch "${manifest_list_url}" |
         # Break up the single-line JSON output into separate lines by adding
         # newlines before and after the chars '[', ']', '{', and '}'.
-        sed -e 's/\([][{}]\)/\n\1\n/g' |
+        # This uses the \${NL} syntax because some BSD variants of sed don't
+        # support \n syntax in the replacement string, but instead require
+        # a literal newline preceded by a backslash.
+        sed -e 's/\([][{}]\)/\'"${NL}"'\1\'"${NL}"'/g' |
         # Extract the "images":[...] list.
         sed -n '/"images":/,/]/ p' |
         # Each image's details are now on a separate line, e.g.

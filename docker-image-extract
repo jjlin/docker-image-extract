@@ -220,13 +220,13 @@ else
                 break
             fi
         done)
-fi
 
-if [ -n "${digest}" ]; then
-    echo "Platform ${PLATFORM} resolved to '${digest}'..."
-else
-    echo "No image digest found. Verify that the image, ref, and platform are valid."
-    exit 1
+    if [ -n "${digest}" ]; then
+        echo "Platform ${PLATFORM} resolved to '${digest}'..."
+    else
+        echo "No image digest found. Verify that the image, ref, and platform are valid."
+        exit 1
+    fi
 fi
 
 # https://docs.docker.com/registry/spec/auth/token/#how-to-authenticate
